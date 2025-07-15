@@ -1,97 +1,191 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Serilog;
+using Serilog.Events;
 
-namespace WinFormsApp2
+/*
+--------------------------------
+NuGet
+Install-Package Serilog
+Install-Package Serilog.Sinks.Console
+Install-Package Serilog.Sinks.File
+Install-Package Serilog.Enrichers.Thread
+Install-Package Serilog.Sinks.Async
+
+--------------------------------
+{Exception}:
+-If the log statement includes an Exception object, this renders the exception message + stack trace.
+ If no exception is logged, it outputs nothing.
+-example:
+    try
+    {
+        throw new Exception("Something broke");
+    }
+    catch (Exception ex)
+    {
+        Logger.loge("Caught error", ex);
+    }    
+
+--------------------------------
+//example:
+// 初始化，只需要呼叫一次
+Logger.Init(minLevel: LogEventLevel.Debug);
+
+// 簡單記錄
+Logger.logi("Application started");
+
+// 記錄警告
+Logger.logw("This is a warning");
+
+// 記錄錯誤
+Logger.loge("Something went wrong");
+
+// 帶 Exception 的錯誤記錄
+try
+{
+    throw new InvalidOperationException("Test exception");
+}
+catch (Exception ex)
+{
+    Logger.loge("Caught exception:", ex);
+}
+
+// 關閉日誌(程序結束時調用)
+Logger.Close();
+*/
+namespace ProfitWin.Logging
 {
     public static class Logger
     {
-        private static readonly object _lock = new object();  // lock object for thread safety
+        private static bool _isInitialized = false;
 
-        private static string baseDir = @"c:\temp3\log"; // base log directory
-        private static bool isFirstWrite = true;
-        private static bool isWriteFile = true;
+        public static void Init(
+            LogEventLevel minLevel = LogEventLevel.Debug,
+            string generalLogFilePath = "logs/all.log",
+            string errorLogFilePath = "logs/error.log",
+            bool enableConsole = true,
+            bool enableFile = true)
+        {
+            if (_isInitialized)
+                return;
 
-        private static string logDir;   // directory with timestamp
-        private static string logFile;  // full path to log.txt
-        private static string errorLogFile; // full path to log_e.txt
+            var config = new LoggerConfiguration()
+                .MinimumLevel.Is(minLevel)
+                .Enrich.WithThreadId()
+                .Enrich.FromLogContext();
+
+            string outputTemplate = "[{Timestamp:yyyy/MM/dd HH:mm:ss.fff} {Level:u3}][{ThreadId} {CallerFile}:{CallerLine} {CallerMember}] {Message}{NewLine}{Exception}";
+
+            if (enableConsole)
+            {
+                config = config.WriteTo.Console(outputTemplate: outputTemplate);
+            }
+
+            if (enableFile)
+            {
+                if (!string.IsNullOrWhiteSpace(generalLogFilePath))
+                {
+                    EnsureDirectoryExists(generalLogFilePath);
+                    config = config.WriteTo.Async(a => a.File(
+                        generalLogFilePath,
+                        outputTemplate: outputTemplate,
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 100));
+                }
+
+                if (!string.IsNullOrWhiteSpace(errorLogFilePath))
+                {
+                    EnsureDirectoryExists(errorLogFilePath);
+                    config = config.WriteTo.Async(a => a.File(
+                        errorLogFilePath,
+                        restrictedToMinimumLevel: LogEventLevel.Warning,
+                        outputTemplate: outputTemplate,
+                        rollingInterval: RollingInterval.Day,
+                        retainedFileCountLimit: 100));
+                }
+            }
+
+            Log.Logger = config.CreateLogger();
+            _isInitialized = true;
+        }
+
+        private static void EnsureDirectoryExists(string filePath)
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrWhiteSpace(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
+
+        private static ILogger WithCallerContext(string file, int line, string member)
+        {
+            return Log.ForContext("CallerFile", Path.GetFileName(file))
+                      .ForContext("CallerLine", line)
+                      .ForContext("CallerMember", member);
+        }
 
         public static void logi(string message,
             [CallerFilePath] string file = "",
-            [CallerMemberName] string member = "",
-            [CallerLineNumber] int line = 0)
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            var log = FormatLog("info", message, file, member, line);
-            WriteLog(log, "info");
+            WithCallerContext(file, line, member).Information(message);
         }
 
         public static void logw(string message,
             [CallerFilePath] string file = "",
-            [CallerMemberName] string member = "",
-            [CallerLineNumber] int line = 0)
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            var log = FormatLog("WARN", message, file, member, line);
-            WriteLog(log, "warn");
+            WithCallerContext(file, line, member).Warning(message);
         }
 
         public static void loge(string message,
             [CallerFilePath] string file = "",
-            [CallerMemberName] string member = "",
-            [CallerLineNumber] int line = 0)
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            var log = FormatLog("ERROR", message, file, member, line);
-            WriteLog(log, "error");
+            WithCallerContext(file, line, member).Error(message);
         }
 
-        private static string FormatLog(string level, string message, string file, string member, int line)
+        // Exception overload for error logs
+        public static void loge(string message, Exception ex,
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            string time = DateTime.Now.ToString("HH:mm:ss.fff");
-            string fileName = Path.GetFileName(file);
-            return $"[{time} {level}][{fileName}:{line} {member}()] {message}";
+            WithCallerContext(file, line, member).Error(ex, message);
         }
 
-        private static void CreateLogDir()
+        public static void logv(string message,
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            logDir = Path.Combine(baseDir, timestamp);
-
-            Directory.CreateDirectory(logDir);
-
-            logFile = Path.Combine(logDir, "log.txt");
-            errorLogFile = Path.Combine(logDir, "log_e.txt");
+            WithCallerContext(file, line, member).Verbose(message);
         }
 
-        private static void WriteLog(string formattedLog, string level)
+        public static void logd(string message,
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
         {
-            lock (_lock)
-            {
-                // Write to console and files atomically
-                Console.WriteLine(formattedLog);
+            WithCallerContext(file, line, member).Debug(message);
+        }
 
-                if (!isWriteFile)
-                    return;
+        public static void logf(string message,
+            [CallerFilePath] string file = "",
+            [CallerLineNumber] int line = 0,
+            [CallerMemberName] string member = "")
+        {
+            WithCallerContext(file, line, member).Fatal(message);
+        }
 
-                if (isFirstWrite)
-                {
-                    CreateLogDir();
-                    isFirstWrite = false;
-                }
-
-                try
-                {
-                    File.AppendAllText(logFile, formattedLog + Environment.NewLine);
-
-                    if (level == "warn" || level == "error")
-                    {
-                        File.AppendAllText(errorLogFile, formattedLog + Environment.NewLine);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Log exception to console (also inside lock to keep order)
-                    Console.WriteLine("Failed to write log file: " + ex.Message);
-                }
-            }
+        public static void Close()
+        {
+            Log.CloseAndFlush();
         }
     }
 }
