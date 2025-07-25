@@ -17,7 +17,7 @@ asyncWorker.RunTask(() => Console.WriteLine("Sync Task A"));
 await asyncWorker.RunTask(incfuncAsync2);
 
 //-------------------------
-example 2(sync):
+example 2.1(sync):
 public void incfunc_sync()
 {
     int x = vvv + 1;
@@ -26,6 +26,18 @@ public void incfunc_sync()
     cnt++;
 }
 await asyncWorker.RunTask(incfunc_sync);
+//-------------------------
+example 2.2(sync):
+Func<Task> innerfunction = () =>
+{
+    int x = vvv + 1;
+    Thread.Sleep(100);
+    vvv = x;
+    cnt++;
+    return Task.CompletedTask;  // 包裝成非同步格式
+};
+
+await asyncWorker2.RunTask(innerfunction);
 //-------------------------
 example 3(sync):
 
