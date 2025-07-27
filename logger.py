@@ -13,10 +13,11 @@ base_dir = f"C:\\data\\code\\aistk_system\\database\\aistk\\log\\{dirymd}"
 '''
 
 class LogLevel(IntEnum):
-    DEBUG = 0
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
+
+    DEBUG = 1
+    INFO = 2
+    WARNING = 3
+    ERROR = 4
 
 
 class LogFormat(Enum):
@@ -30,6 +31,7 @@ class LogSink(Enum):
     NONE = 4
 
 def LogLevel_to_string(level: LogLevel) -> str:
+
     if level == LogLevel.DEBUG:
         return "DEBUG"
     elif level == LogLevel.INFO:
@@ -157,21 +159,31 @@ def log_init(log_mode=LogFormat.COMPACT, level=LogLevel.DEBUG, sink = LogSink.BO
     sys.stdout.flush()
 
 
+from types import MethodType
+
+logger.verbose = MethodType(lambda self, msg, *a, **kw: self.log("VERBOSE", msg, *a, **kw), logger)
+
 logger.logd = logger.debug
 logger.logi = logger.info
 logger.logw = logger.warning
 logger.loge = logger.error
 
+logd = logger.debug
+logi = logger.info
+logw = logger.warning
+loge = logger.error
+
 
 def ff():
+
     logger.logi("===================")
+
     logger.debug("this is debug")
     logger.info("this is info")
     logger.warning("this is warning")
     logger.error("this is error")
 
 if __name__ == '__main__':
-    log_init(LogFormat.FULL, level=LogLevel.DEBUG)
     log_init(LogFormat.FULL, level=LogLevel.DEBUG)
     ff()
 
