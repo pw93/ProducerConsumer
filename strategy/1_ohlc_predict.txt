@@ -1,0 +1,35 @@
+dataset ohlcv
+{sid, StkQuotc}
+sid:stock id
+
+StkQuotc:
+	ymd[]
+	o[]
+	h[]
+	l[]
+	c[]
+	v[]
+	
+	
+for all the dataset, i want to check the up/down trend/probability according to previous few days pattern.
+x:	
+b1 = o[day-3]-c[day-4]>0
+b2 = c[day-3]-c[day-4]>0
+b3 = o[day-2]-c[day-3]>0
+b4 = c[day-2]-c[day-3]>0
+b5 = o[day-1]-c[day-2]>0
+b6 = c[day-1]-c[day-2]>0
+
+case = b1+b2*2 + b3*4 ...
+
+y:
+(c[day+3] - o[day-0]) /o[day-0]
+
+
+output statitistic:
+case case_count y_avg y_std y_at_20% y_at_80%
+0	
+1
+
+
+
